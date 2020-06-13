@@ -13,7 +13,9 @@ os.chdir(path)
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-
+import matplotlib.pyplot as plt
+from silhoutte import plot_silhouette, plot_sil_scores
+from cluster import one_hot, prep_kmodes
 
 transactionDF=pd.read_excel("../data/KPMG_rawData.xlsx", sheetname="Transaction")
 newCustDF=pd.read_excel("../data/KPMG_rawData.xlsx", sheetname="NewCustomerList")
@@ -136,16 +138,24 @@ custDemoDFv1 = custDemoDF[['customer_id', 'gender',
        'past_3_years_bike_related_purchases', 'job_title',
        'job_industry_category', 'wealth_segment', 'deceased_indicator',
        'owns_car', 'tenure', 'CustAgeBuckets']]
+
 print(missing_values_table(custDemoDFv1))
 
 print(missing_values_table(custAddrDF))
 
 ########## Combine Customer Demographics and customer address
 custDemoDFv2 = pd.merge(custDemoDFv1, custAddrDF, on="customer_id", how="left")
+
+custDemoDFv2['state'].isnull().sum()
+custDemoDFv2['state']=custDemoDFv2['state'].fillna(method='bfill')
+custDemoDFv2['state']=custDemoDFv2['state'].replace({'New South Wales':'NSW',
+          'Victoria':'VIC'})
+
 custDemoDFv3 = custDemoDFv2[['customer_id', 'gender',
        'past_3_years_bike_related_purchases', 'job_title',
        'job_industry_category', 'wealth_segment', 'deceased_indicator',
-       'owns_car', 'tenure', 'CustAgeBuckets', 'property_valuation']]
+       'owns_car', 'tenure', 'CustAgeBuckets', 'property_valuation',
+       'state']]
 
 print(missing_values_table(custDemoDFv3))
 
@@ -207,7 +217,7 @@ online_tran = online_tran.rename(columns={'sum':'total_online_transaction'})
 unique_rec = cust_transaction[['customer_id', 'gender', 'past_3_years_bike_related_purchases',
        'job_title', 'job_industry_category', 'wealth_segment',
        'deceased_indicator', 'owns_car', 'tenure', 'CustAgeBuckets',
-       'property_valuation']]
+       'property_valuation', 'state']]
 
 unique_rec = unique_rec.drop_duplicates()
 
@@ -217,7 +227,29 @@ df2 = pd.merge(df1, sum_profit, on="customer_id", how="left")
 df3 = pd.merge(df2, online_tran, on="customer_id", how="left")
 df4 = pd.merge(df3, total_tran, on="customer_id", how="left")
 
-
 df4 = df4.rename(columns={'amax':'max_transaction_date', 'sum':'sum_profit'})
+df4['max_transaction_date'] = pd.to_datetime(df4['max_transaction_date'])
+df4['pcnt_online_tran'] = df4['total_online_transaction']/df4['total_transaction']
+
 df4.to_excel("../Analysis/df4.xlsx", index=False)
 cust_transaction.to_excel("../Analysis/cust_transaction.xlsx", index=False)
+
+
+
+
+
+
+for col in df4.columns:
+    print(col, df4[col].dtype)
+
+################ Kmode Clustering ##################
+# df_users_km = prep_kmodes(df_users)
+df_km = prep_kmodes(df4)
+
+X = one_hot(df4)
+# X_users = one_hot(df_users)
+
+for i in range(2, 9):
+    plot_silhouette(df_km, X.todense(), n_clusters=i, model='KM')
+
+plot_sil_scores(df_km, X.todense(), model='KM')
